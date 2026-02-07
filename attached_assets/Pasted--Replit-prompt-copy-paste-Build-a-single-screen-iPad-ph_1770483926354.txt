@@ -1,0 +1,180 @@
+## Replit prompt (copy/paste)
+
+Build a **single-screen, iPad/phone-friendly inventory loading tracker** as a **React (Vite) web app** with plain CSS. Keep it extremely straightforward, big tap targets, minimal styling.
+
+### High-level behavior
+
+* One screen with 3 sections top-to-bottom:
+
+  1. Main pallet tracking table
+  2. MT / KCK / Misc breakdown (three side-by-side panels, stack on small screens)
+  3. Notes rows
+* Every table/list supports **add row** and **per-row trash/delete**.
+* Persist everything in **localStorage**.
+* Support **ONE saved session at a time** (overwrite the previously saved session).
+* Session saving **requires a name**.
+
+---
+
+## Top toolbar (at top of screen)
+
+Include:
+
+* **Session Name** input (required to save)
+* **Store Session** button
+
+  * Validates data; if valid, saves current app state to localStorage under a single key (overwrite any prior saved session)
+* **Recall Session** button
+
+  * Loads the saved session from localStorage into the UI (if none exists, show a small message)
+* **Start New / Wipe Current** button
+
+  * Clears current UI back to defaults (does NOT delete the saved session)
+
+Optional: show “Saved: <name> at <timestamp>” if a session exists.
+
+---
+
+## Section 1: Main Pallet Tracking Table
+
+Create a table with exactly these headers:
+
+1. **EDI**
+2. **Pallet Weight**
+3. **Item Quantity**
+4. **Total Pallets**
+5. **Total Weight**
+
+### Row inputs and controls
+
+Each row has:
+
+* **EDI**: text input (required for saving)
+* **Pallet Weight**: integer number input (no decimals; treat empty as 0)
+* **Item Quantity**: integer number input (can be blank; no extra calculations needed; just store/display it)
+* **Total Pallets**: display an integer with **+1 / -1** buttons in the same cell
+
+  * default 0 (or 1 if you prefer; pick 0 to be safe)
+  * cannot go below 0
+* **Total Weight**: read-only, auto-calculated continuously:
+
+  * `Total Weight = Pallet Weight * Total Pallets` (integer)
+
+Each row also has a **trash/delete** button (e.g., an icon button at the end of the row or integrated neatly) that deletes that specific row.
+
+### Add row
+
+* **+ Add Row** button adds a new empty row.
+
+### Running totals (below the table)
+
+At the bottom of this main table show:
+
+* **Running Total Pallets** = sum of Total Pallets across all rows
+* **Running Total Overall Weight** = sum of Total Weight across all rows
+  These update instantly on any change.
+
+---
+
+## Section 2: MT / KCK / Misc breakdown
+
+Below the main table, create three labeled panels/columns titled exactly:
+
+* **MT**
+* **KCK**
+* **Misc**
+
+Each panel contains a mini-table/list with rows having:
+
+* **EDI** (text input)
+* **Item Quantity** (integer number input, stored/displayed only)
+
+Each row has a **trash/delete** button.
+Each panel has **+ Add Row**.
+
+Defaults: start with 1 empty row in each panel.
+
+---
+
+## Section 3: Notes
+
+At the very bottom:
+
+* A simple notes rows list:
+
+  * Each row is a single-line input (or small textarea—single line preferred)
+  * Each row has trash/delete
+  * **+ Add Note** button
+    Default: 1 empty note row.
+
+---
+
+## Validation rules (important)
+
+Implement validation that runs on **Store Session** and blocks saving if invalid. Show a clear message and highlight offending rows.
+
+### Required
+
+* Session Name is required (non-empty)
+* In the main pallet table:
+
+  * Any row that has ANY data entered must have **EDI** filled (non-empty)
+  * Prevent negative numbers everywhere
+  * Pallet Weight and Item Quantity must be valid integers when present (allow blank -> treat as 0 or empty; your choice, but keep consistent)
+
+### “Accidental wrong-field” checks (simple but effective)
+
+On Store Session, for each main row:
+
+* Flag if **EDI exactly matches** the Pallet Weight or Item Quantity value (string compare), because that likely means the user typed the wrong thing in the wrong field.
+
+  * Example: if `EDI === String(palletWeight)` or `EDI === String(itemQty)` -> show “EDI looks like a number you entered in another field—double check.”
+* Also flag if Pallet Weight or Item Quantity equals the EDI when parsed to int and back (only if EDI is numeric). Keep it simple and avoid overengineering.
+
+If any row fails validation, do not save.
+
+---
+
+## Persistence (localStorage)
+
+* Auto-save **current working state** on change to localStorage (e.g., `inventory_current_state`) so refresh doesn’t lose progress.
+* Store the **saved session** separately (e.g., `inventory_saved_session`) as ONE object (overwrite).
+* “Start New / Wipe Current” clears only the current working state and resets UI defaults.
+
+### Suggested data shape
+
+```js
+{
+  sessionName: string,
+  savedAt: string, // ISO
+  palletRows: [{ id, edi, palletWeight, itemQty, totalPallets }],
+  mtRows: [{ id, edi, itemQty }],
+  kckRows: [{ id, edi, itemQty }],
+  miscRows: [{ id, edi, itemQty }],
+  noteRows: [{ id, text }]
+}
+```
+
+Use stable `id`s (uuid or simple timestamp+counter) for list rendering.
+
+---
+
+## UX requirements
+
+* Big tap-friendly + / - buttons and trash buttons.
+* Keep it clean: one page, no routing, no authentication.
+* On small screens, allow horizontal scroll for the main table if needed.
+* Use minimal CSS and clear spacing.
+
+---
+
+## Deliverable
+
+A working Replit project with:
+
+* React + Vite
+* Single screen UI matching the spec
+* Live calculations and totals
+* Per-row delete everywhere
+* Store/Recall/Wipe session behavior exactly as described
+* LocalStorage persistence for both “current” and “saved session”
