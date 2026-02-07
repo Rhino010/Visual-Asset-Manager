@@ -11,10 +11,11 @@ A single-screen, iPad and phone-friendly inventory loading tracker built as a Re
 The top toolbar stays fixed at the top of the screen so it's always accessible, even when scrolling through large data sets.
 
 - **Session Name**: A text input where you name your current work session. This name is required before you can save.
-- **Store Session**: Saves all current data (every table, every row, every note) as a single saved session. Only one saved session exists at a time — storing a new one overwrites the previous one. Before saving, the app runs validation checks and will block the save if any issues are found, highlighting problem areas in red.
-- **Recall Session**: Loads the previously saved session back into the app, restoring all fields exactly as they were when saved.
-- **New / Wipe Current**: Clears all current data and resets the screen to empty defaults (one blank row in each section). This does **not** delete the saved session — you can still recall it afterward.
-- **Saved Indicator**: When a session has been saved, a small badge appears showing the session name and the date/time it was saved.
+- **Store Session**: Saves all current data (every table, every row, every note) as a new saved session. You can store as many sessions as you need — each one is kept separately with its own name and timestamp. Before saving, the app runs validation checks and will block the save if any issues are found, highlighting problem areas in red.
+- **Sessions Panel**: Click the "Sessions" button to expand a dropdown panel showing all your saved sessions. Each session displays its name, save date/time, number of rows, and pallet count. From here you can:
+  - **Load** any session to restore it into the working area
+  - **Delete** any individual session with the trash button
+- **New / Wipe Current**: Clears all current data and resets the screen to empty defaults (one blank row in each section). This does **not** delete any saved sessions — you can still load them afterward.
 
 ### 2. Pallet Tracking Table (Main Section)
 
@@ -96,7 +97,7 @@ Two separate localStorage entries are used:
 | Key | Purpose | When Updated |
 |-----|---------|--------------|
 | `inventory_current_state` | Stores the current working data (everything on screen) | Automatically on every single change — typing, clicking +/-, adding or deleting rows |
-| `inventory_saved_session` | Stores one manually saved snapshot of the data | Only when you click the "Store Session" button |
+| `inventory_saved_sessions` | Stores all manually saved sessions as a list | When you click "Store Session" (adds a new entry) or delete a session (removes it) |
 
 ### Current State (Auto-Save)
 
@@ -106,22 +107,22 @@ Every time you make any change — type a character, press a +/- button, add a r
 - **Closing and reopening the browser** brings back exactly where you left off.
 - No "save" button is needed for in-progress work.
 
-### Saved Session (Manual Save)
+### Saved Sessions (Manual Save & Delete)
 
-When you click **Store Session**, the current state plus a timestamp is saved to `inventory_saved_session`. Key behaviors:
+When you click **Store Session**, the current state plus a timestamp is saved as a new entry in the sessions list. Key behaviors:
 
-- **Only one session can be saved at a time.** Saving a new session overwrites the previous one.
-- **Recalling** loads the saved session data back into the working area, replacing whatever is currently on screen.
-- **Wiping** clears the current working state but does **not** delete the saved session. You can still recall it.
+- **Multiple sessions can be saved.** Each store creates a new session entry — previous sessions are not overwritten.
+- **Loading** a session replaces the current working data with that session's data.
+- **Deleting** a session removes it permanently from the saved list. This does not affect your current working data or any other sessions.
+- **Wiping** clears the current working state but does **not** delete any saved sessions. You can still load them.
 
 ### Data Structure
 
-Both storage entries use the same structure:
+The current state uses this structure:
 
 ```
 {
   sessionName: "My Loading Session",
-  savedAt: "2026-02-07T12:00:00.000Z",        // only in saved session
   palletRows: [
     { id, edi, palletWeight, itemQty, totalPallets }
   ],
@@ -137,6 +138,15 @@ Both storage entries use the same structure:
   noteRows: [
     { id, text }
   ]
+}
+```
+
+Each saved session adds:
+```
+{
+  sessionId: "unique-id",
+  savedAt: "2026-02-07T12:00:00.000Z",
+  ...all the fields above
 }
 ```
 

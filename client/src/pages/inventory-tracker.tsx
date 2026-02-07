@@ -16,10 +16,13 @@ import {
   ClipboardList,
   StickyNote,
   Layers,
+  FolderOpen,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const CURRENT_STATE_KEY = "inventory_current_state";
-const SAVED_SESSION_KEY = "inventory_saved_session";
+const SAVED_SESSIONS_KEY = "inventory_saved_sessions";
 
 let idCounter = 0;
 function makeId(): string {
@@ -55,6 +58,7 @@ interface AppState {
 }
 
 interface SavedSession extends AppState {
+  sessionId: string;
   savedAt: string;
 }
 
@@ -95,12 +99,19 @@ function loadCurrentState(): AppState {
   return defaultState();
 }
 
-function loadSavedSession(): SavedSession | null {
+function loadSavedSessions(): SavedSession[] {
   try {
-    const raw = localStorage.getItem(SAVED_SESSION_KEY);
-    if (raw) return JSON.parse(raw);
+    const raw = localStorage.getItem(SAVED_SESSIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
-  return null;
+  return [];
+}
+
+function saveSessions(sessions: SavedSession[]) {
+  localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(sessions));
 }
 
 function parseIntSafe(val: string): number {
@@ -121,10 +132,8 @@ function rowHasData(row: PalletRow): boolean {
 export default function InventoryTracker() {
   const [state, setState] = useState<AppState>(loadCurrentState);
   const [errors, setErrors] = useState<ValidationError[]>([]);
-  const [savedInfo, setSavedInfo] = useState<{ name: string; time: string } | null>(() => {
-    const s = loadSavedSession();
-    return s ? { name: s.sessionName, time: s.savedAt } : null;
-  });
+  const [sessions, setSessions] = useState<SavedSession[]>(loadSavedSessions);
+  const [showSessions, setShowSessions] = useState(false);
   const { toast } = useToast();
   const isFirstRender = useRef(true);
 
@@ -220,29 +229,37 @@ export default function InventoryTracker() {
       });
       return;
     }
-    const session: SavedSession = { ...state, savedAt: new Date().toISOString() };
-    localStorage.setItem(SAVED_SESSION_KEY, JSON.stringify(session));
-    setSavedInfo({ name: session.sessionName, time: session.savedAt });
+    const session: SavedSession = {
+      ...state,
+      sessionId: makeId(),
+      savedAt: new Date().toISOString(),
+    };
+    const updated = [session, ...sessions];
+    setSessions(updated);
+    saveSessions(updated);
     toast({ title: "Session Saved", description: `"${session.sessionName}" saved successfully.` });
   };
 
-  const handleRecall = () => {
-    const saved = loadSavedSession();
-    if (!saved) {
-      toast({ title: "No Saved Session", description: "There is no saved session to recall.", variant: "destructive" });
-      return;
-    }
-    const { savedAt: _savedAt, ...rest } = saved;
+  const handleLoadSession = (session: SavedSession) => {
+    const { sessionId: _id, savedAt: _at, ...rest } = session;
     setState(rest);
     setErrors([]);
-    toast({ title: "Session Recalled", description: `"${saved.sessionName}" loaded.` });
+    setShowSessions(false);
+    toast({ title: "Session Loaded", description: `"${session.sessionName}" loaded.` });
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    const updated = sessions.filter((s) => s.sessionId !== sessionId);
+    setSessions(updated);
+    saveSessions(updated);
+    toast({ title: "Session Deleted", description: "The saved session has been removed." });
   };
 
   const handleWipe = () => {
     setState(defaultState());
     setErrors([]);
     localStorage.removeItem(CURRENT_STATE_KEY);
-    toast({ title: "Cleared", description: "Current data wiped. Saved session is still available." });
+    toast({ title: "Cleared", description: "Current data wiped. Saved sessions are still available." });
   };
 
   const rowHasError = (id: string) => errors.some((e) => e.rowId === id);
@@ -275,9 +292,20 @@ export default function InventoryTracker() {
                   <Save className="w-4 h-4" />
                   <span className="hidden xs:inline">Store</span>
                 </Button>
-                <Button data-testid="button-recall-session" onClick={handleRecall} variant="outline" size="sm">
-                  <RotateCcw className="w-4 h-4" />
-                  <span className="hidden xs:inline">Recall</span>
+                <Button
+                  data-testid="button-toggle-sessions"
+                  onClick={() => setShowSessions(!showSessions)}
+                  variant="outline"
+                  size="sm"
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  <span className="hidden xs:inline">Sessions</span>
+                  {sessions.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      {sessions.length}
+                    </Badge>
+                  )}
+                  {showSessions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </Button>
                 <Button data-testid="button-wipe" onClick={handleWipe} variant="ghost" size="sm">
                   <FilePlus2 className="w-4 h-4" />
@@ -286,13 +314,6 @@ export default function InventoryTracker() {
               </div>
             </div>
           </div>
-          {savedInfo && (
-            <div className="mt-1.5">
-              <Badge variant="outline" className="text-xs text-muted-foreground font-normal">
-                Saved: {savedInfo.name} at {new Date(savedInfo.time).toLocaleString()}
-              </Badge>
-            </div>
-          )}
           {errors.length > 0 && (
             <div className="mt-2 flex items-start gap-2 text-sm text-destructive bg-destructive/10 rounded-md p-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -304,10 +325,61 @@ export default function InventoryTracker() {
             </div>
           )}
         </div>
+        {showSessions && (
+          <div className="border-t bg-muted/30">
+            <div className="max-w-7xl mx-auto px-3 py-3">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Saved Sessions</div>
+              {sessions.length === 0 ? (
+                <p data-testid="text-no-sessions" className="text-sm text-muted-foreground py-2">
+                  No saved sessions yet. Fill in data and click "Store" to save one.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {sessions.map((s) => {
+                    const palletCount = s.palletRows.reduce((sum, r) => sum + r.totalPallets, 0);
+                    return (
+                      <div
+                        key={s.sessionId}
+                        data-testid={`session-item-${s.sessionId}`}
+                        className="flex items-center justify-between gap-3 rounded-md border bg-background p-2"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{s.sessionName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(s.savedAt).toLocaleString()} &middot; {s.palletRows.length} row{s.palletRows.length !== 1 ? "s" : ""} &middot; {palletCount} pallet{palletCount !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            data-testid={`button-load-session-${s.sessionId}`}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLoadSession(s)}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            Load
+                          </Button>
+                          <Button
+                            data-testid={`button-delete-session-${s.sessionId}`}
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleDeleteSession(s.sessionId)}
+                            className="text-muted-foreground"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto px-3 py-4 space-y-4">
-        {/* Section 1: Main Pallet Tracking */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <div className="flex items-center gap-2">
@@ -465,7 +537,6 @@ export default function InventoryTracker() {
           </CardContent>
         </Card>
 
-        {/* Section 2: MT / KCK / Misc breakdown */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {(["mtRows", "kckRows", "miscRows"] as const).map((section) => {
             const label = section === "mtRows" ? "MT" : section === "kckRows" ? "KCK" : "Misc";
@@ -560,7 +631,6 @@ export default function InventoryTracker() {
           })}
         </div>
 
-        {/* Section 3: Notes */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <div className="flex items-center gap-2">
